@@ -147,7 +147,7 @@ if __name__ == '__main__':
     scene, task = branches[parallel_index % NUM_TASKS]
     key = scene + "-" + task
 
-    while global_t <= MAX_TIME_STEP and not stop_requested:
+    while global_t <= MAX_TIME_STEP and not stop_requested: #MAX_TIME_STEP is number of frames where the agent can run
       diff_global_t = training_thread.process(sess, global_t, summary_writer,
                                               summary_op[key], summary_placeholders[key])
       global_t += diff_global_t

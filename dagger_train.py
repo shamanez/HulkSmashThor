@@ -3,11 +3,13 @@
 import tensorflow as tf
 import threading
 import numpy as np
+import pdb as b
 
 import signal
 import random
 import os
 import time
+
 
 from dagger_policy_generators import SmashNet
 from dagger_training_thread import SmashNetTrainingThread
@@ -23,9 +25,10 @@ if __name__ == '__main__':
   network_scope = TASK_TYPE
   list_of_tasks = TRAIN_TASK_LIST
   list_of_val_tasks = VALID_TASK_LIST
-  scene_scopes = list_of_tasks.keys()
+  scene_scopes = list_of_tasks.keys() #currently only one scene type. That is washroom
   global_t = 0
   stop_requested = False
+
 
   if not os.path.exists(CHECKPOINT_DIR): os.mkdir(CHECKPOINT_DIR)
 
@@ -34,11 +37,12 @@ if __name__ == '__main__':
                                       INITIAL_ALPHA_LOG_RATE)
   initial_diffidence_rate_seed = INITIAL_DIFFIDENCE_RATE  # TODO: hyperparam
 
-  global_network = SmashNet(action_size = ACTION_SIZE,
+  global_network = SmashNet(action_size = ACTION_SIZE,  #Ths is simply the policy output network (Siamese)
                                         device = device,
                                         network_scope = network_scope,
                                         scene_scopes = scene_scopes)
 
+  
   branches = []
   branch_val = []
   for scene in scene_scopes:
@@ -51,7 +55,6 @@ if __name__ == '__main__':
         branch_val.append(True)
 
   print("Total navigation tasks: %d" % len(branches))
-
   NUM_TASKS = len(branches)
   assert PARALLEL_SIZE >= NUM_TASKS, "Not enough threads for multitasking: at least {} threads needed.".format(NUM_TASKS)
 
@@ -66,15 +69,19 @@ if __name__ == '__main__':
   # instantiate each training thread
   # each thread is training for one target in one scene
   training_threads = [] # 1 training thread for the single target
+
+#I think this is trainign the network in threads dor different tasks and tweaking the weights ?
+ 
   for i in range(PARALLEL_SIZE):
-    scene, task = branches[i%NUM_TASKS]
+    scene, task = branches[i%NUM_TASKS] #Here task number is actually the target 
     if USE_GPU:
       device = "/gpu:0"
     else:
       device = "/cpu:{:d}".format(i%NUM_CPU)
     mode = "val" if branch_val[i % NUM_TASKS] else "train"
-    training_thread = SmashNetTrainingThread(i,
-                                             global_network,
+
+    training_thread = SmashNetTrainingThread(i,  
+                                             global_network, #This is the policy network we are talking
                                              initial_learning_rate,
                                              learning_rate_input,
                                              grad_applier,
@@ -82,8 +89,8 @@ if __name__ == '__main__':
                                              device,
                                              initial_diffidence_rate_seed,
                                              mode=mode,
-                                             network_scope = "thread-%d"%(i+1),
-                                             scene_scope = scene,
+                                             network_scope = "thread-%d"%(i+1), #theread1 
+                                             scene_scope = scene, #single scene
                                              task_scope = task,
                                              encourage_symmetry= ENCOURAGE_SYMMETRY)
     training_threads.append(training_thread)
@@ -101,9 +108,12 @@ if __name__ == '__main__':
   summary_op = dict()
   summary_placeholders = dict()
 
-  for i in range(PARALLEL_SIZE):
+  for i in range(PARALLEL_SIZE): #For each network in the thread 
     scene, task = branches[i%NUM_TASKS]
+
     key = scene + "-" + task
+
+
     if branch_val[i % NUM_TASKS]:
       key = scene + "-val-" + task
 
@@ -127,6 +137,7 @@ if __name__ == '__main__':
 
   summary_writer = tf.summary.FileWriter(LOG_FILE + '/' + time.strftime("%Y-%m-%d-%H%M%S"), sess.graph)
 
+
   # init or load checkpoint with saver
   # if you don't need to be able to resume training, use the next line instead.
   # it will result in a much smaller checkpoint file.
@@ -134,6 +145,7 @@ if __name__ == '__main__':
   saver = tf.train.Saver(max_to_keep=10)
 
   checkpoint = tf.train.get_checkpoint_state(CHECKPOINT_DIR)
+
   if checkpoint and checkpoint.model_checkpoint_path:
     saver.restore(sess, checkpoint.model_checkpoint_path)
     print("checkpoint loaded: {}".format(checkpoint.model_checkpoint_path))
@@ -145,7 +157,8 @@ if __name__ == '__main__':
     print("Could not find old checkpoint")
 
 
-  def train_function(parallel_index):
+  def train_function(parallel_index):  #This is called by below
+    print("I am hereeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee")
     global global_t
     training_thread = training_threads[parallel_index]
     last_global_t = 0
@@ -155,7 +168,7 @@ if __name__ == '__main__':
     if branch_val[parallel_index % NUM_TASKS]:
       key = scene + "-val-" + task
 
-    while global_t < MAX_TIME_STEP and not stop_requested:
+    while global_t < MAX_TIME_STEP and not stop_requested: #
       diff_global_t = training_thread.process(sess, global_t, summary_writer,
                                               summary_op[key], summary_placeholders[key])
       global_t += diff_global_t
@@ -169,9 +182,11 @@ if __name__ == '__main__':
     global stop_requested
     print('You pressed Ctrl+C!')
     stop_requested = True
-
-  train_threads = [threading.Thread(target=train_function, args=(i,)) for i in range(PARALLEL_SIZE)]
+    
+  train_threads = [threading.Thread(target=train_function, args=(i,)) for i in range(PARALLEL_SIZE)] #now trained threads
+ 
   signal.signal(signal.SIGINT, signal_handler)
+  b.set_trace()
   # start each training thread
   for t in train_threads: t.start()
 

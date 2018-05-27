@@ -13,7 +13,7 @@ from dagger_policy_generators import SmashNet, ShortestPathOracle
 
 from dagger_constants import ACTION_SIZE, GAMMA, LOCAL_T_MAX, ENTROPY_BETA, VERBOSE, VALID_TASK_LIST, NUM_VAL_EPISODES, VALIDATE, VALIDATE_FREQUENCY, SUCCESS_CUTOFF, MAX_VALID_STEPS
 
-class SmashNetTrainingThread(object):
+class SmashNetTrainingThread(object): #Threading th training 
   def __init__(self,
                thread_index,
                global_network,
@@ -33,18 +33,20 @@ class SmashNetTrainingThread(object):
     self.learning_rate_input = learning_rate_input
     self.max_global_time_step = max_global_time_step
 
-    self.network_scope = network_scope
-    self.scene_scope = scene_scope
-    self.task_scope = task_scope
+    self.network_scope = network_scope #assiciated with the thread number
+    self.scene_scope = scene_scope #Score
+    self.task_scope = task_scope #This the targe
     self.scopes = [network_scope, scene_scope, task_scope] # ["thread-n", "scene", "target"]
 
-    self.local_network = SmashNet(
+
+
+    self.local_network = SmashNet(  #locally smash net policy netwotk
                            action_size=ACTION_SIZE,
                            device=device,
                            network_scope=network_scope,
                            scene_scopes=[scene_scope])
 
-    self.local_network.prepare_loss(self.scopes)
+    self.local_network.prepare_loss(self.scopes)  #This is to calculate the loss for this thread 
 
     if mode is "train":
       self.trainer = AccumTrainer(device)

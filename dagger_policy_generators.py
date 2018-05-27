@@ -63,7 +63,7 @@ class SmashNet(PolicyGenerator):
 
     self.pi = dict()
 
-    self.W_fc1 = dict()
+    self.W_fc1 = dict() #I think these a scene specific layers
     self.b_fc1 = dict()
 
     self.W_fc2 = dict()
@@ -77,17 +77,20 @@ class SmashNet(PolicyGenerator):
 
     with tf.device(self.device):
 
+
+#Need to understad this state why 4 elements ??????????/
+
       # state (input)
-      self.s = tf.placeholder("float", [None, 2048, 4])
+      self.s = tf.placeholder("float", [None, 2048, 4])  #Input vectors of 4 frames came out from the resnet 
 
       # target (input)
-      self.t = tf.placeholder("float", [None, 2048, 4])
+      self.t = tf.placeholder("float", [None, 2048, 4]) #Why four inputs for the target ?
 
       # "navigation" for global net, "thread-n" for local thread nets
       with tf.variable_scope(network_scope):
         # network key
         key = network_scope
-
+        
         # flatten input
         self.s_flat = tf.reshape(self.s, [-1, 8192])
         self.t_flat = tf.reshape(self.t, [-1, 8192])
@@ -105,8 +108,9 @@ class SmashNet(PolicyGenerator):
         self.b_fc2[key] = self._fc_bias_variable([512], 1024)
         h_fc2 = tf.nn.relu(tf.matmul(h_fc1, self.W_fc2[key]) + self.b_fc2[key])
 
-        for scene_scope in scene_scopes:
+        for scene_scope in scene_scopes: #currently only one scene
           # scene-specific key
+
           key = self._get_key([network_scope, scene_scope])
 
           # "thread-n/scene"
@@ -118,12 +122,12 @@ class SmashNet(PolicyGenerator):
             h_fc3 = tf.nn.relu(tf.matmul(h_fc2, self.W_fc3[key]) + self.b_fc3[key])
 
             # weight for policy output layer
-            self.W_policy[key] = self._fc_weight_variable([512, action_size])
+            self.W_policy[key] = self._fc_weight_variable([512, action_size]) #output layer weight 
             self.b_policy[key] = self._fc_bias_variable([action_size], 512)
 
             # policy (output)
-            pi_ = tf.matmul(h_fc3, self.W_policy[key]) + self.b_policy[key]
-            self.pi[key] = tf.nn.softmax(pi_)
+            pi_ = tf.matmul(h_fc3, self.W_policy[key]) + self.b_policy[key] #policy selecting the optimum
+            self.pi[key] = tf.nn.softmax(pi_)  #policy is done
 
   def run_policy(self, sess, state, target, scopes):
     key = self._get_key(scopes[:2])
@@ -135,14 +139,15 @@ class SmashNet(PolicyGenerator):
     # drop task id (last element) as all tasks in
     # the same scene share the same output branch
     scope_key = self._get_key(scopes[:-1]) # "thread-n/scene"
+   
 
     with tf.device(self.device):
 
       # oracle policy
-      self.opi = tf.placeholder("float", [None, self.action_size])
+      self.opi = tf.placeholder("float", [None, self.action_size]) #policy of the expert
 
       # avoid NaN with clipping when value in pi becomes zero
-      log_spi = tf.log(tf.clip_by_value(self.pi[scope_key], 1e-20, 1.0))
+      log_spi = tf.log(tf.clip_by_value(self.pi[scope_key], 1e-20, 1.0))  #log probabilities
 
       # cross entropy policy loss (output)
       policy_loss = - tf.reduce_sum(log_spi * self.opi, axis=1)
