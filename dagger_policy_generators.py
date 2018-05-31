@@ -11,43 +11,46 @@ class PolicyGenerator(object):
     def run_policy(self, state):
         return NotImplementedError()
 
-class ShortestPathOracle(PolicyGenerator):
+class ShortestPathOracle(PolicyGenerator):  #This is for find the exerts policies  this is a subclass ofpolict generatip
 
-    def __init__(self, env, action_size):
-        self.shortest_path_actions = self._calculate_shortest_paths(env, action_size)
+    def __init__(self, env, action_size): #Here you need to input the  action
+        self.shortest_path_actions = self._calculate_shortest_paths(env, action_size) #get the list of shortest path actions a
 
     def _calculate_shortest_paths(self, env, action_size):
-        s_next_s_action = {}
-        G = nx.DiGraph()
+        s_next_s_action = {}  #This is a tuple collecting current sttate and next state and the action 
+        G = nx.DiGraph()  #This is a graph use to keep the combining paths of states
 
-        for s in range(env.n_locations):
-          for a in range(action_size):
-            next_s = env.transition_graph[s, a]
-            if next_s >= 0:
-              s_next_s_action[(s, next_s)] = a
-              G.add_edge(s, next_s)
+        for s in range(env.n_locations): #Will traverse through all the locations 
+          for a in range(action_size): #at each state the agent can get 4 actions
+            next_s = env.transition_graph[s, a] #Check the next state given the currrent state and the action
+            if next_s >= 0: #This means next state is a possible one not -1 so can traverse 
+              s_next_s_action[(s, next_s)] = a  #we note the by taking action a we can go from state s to s_next
+              G.add_edge(s, next_s) #need to connect the graph  (if the transition from one state to another state is possible we draw an edge)
 
-        best_action = np.zeros((env.n_locations, action_size), dtype=np.float)
-        for i in range(env.n_locations):
-          if i == env.terminal_state_id:
+
+        best_action = np.zeros((env.n_locations, action_size), dtype=np.float) #Now need to find the best action (one hot best for each state)
+        for i in range(env.n_locations):  
+          if i == env.terminal_state_id: #check if this location is the goal . Won't do anything below for loop will cotinue
             continue
-          if env.shortest_path_distances[i, env.terminal_state_id] == -1:
+          if env.shortest_path_distances[i, env.terminal_state_id] == -1: #this means from current state u can't go to terminal state
             continue
-          for path in nx.all_shortest_paths(G, source=i, target=env.terminal_state_id):
-            action = s_next_s_action[(i, path[1])]
-            best_action[i, action] += 1
+          #The following function will generate list of shortes paths from node one to the  
+          for path in nx.all_shortest_paths(G, source=i, target=env.terminal_state_id): #check from current location to the terminal state #Heere the source in the start from ith node and go to terminal state
+
+            action = s_next_s_action[(i, path[1])] #for one shorted path 
+            best_action[i, action] += 1  #Add one action to the position #Best action to take in the node i to go to the terminal state
 
         action_sum = best_action.sum(axis=1, keepdims=True)
         action_sum[action_sum == 0] = 1  # prevent divide-by-zero
         shortest_path_actions = best_action / action_sum
 
-        return shortest_path_actions
+        return shortest_path_actions #get the shortest path actions to go to the erminal point starting from current location and moving to different positions. For each positions we get the probbilities of taking each of 4 actions
 
     def run_policy(self, s_t_id):
         return self.shortest_path_actions[s_t_id]
 
 # Hulk smash net to defeat THOR challenge
-class SmashNet(PolicyGenerator):
+class SmashNet(PolicyGenerator):##### we can use this to train our neural network
   """
     Implementation of the target-driven deep siamese actor-critic network from [Zhu et al., ICRA 2017]
     We use tf.variable_scope() to define domains for parameter sharing
@@ -132,7 +135,7 @@ class SmashNet(PolicyGenerator):
   def run_policy(self, sess, state, target, scopes):
     key = self._get_key(scopes[:2])
     pi_out = sess.run( self.pi[key], feed_dict = {self.s : [state], self.t: [target]} )[0]
-    return pi_out
+    return pi_out #get the probabulties of doing each action in the current state
 
   def prepare_loss(self, scopes): # only called by local thread nets
 
@@ -167,7 +170,7 @@ class SmashNet(PolicyGenerator):
       vs.extend(v.values())
     return vs
 
-  def sync_from(self, src_network, name=None):
+  def sync_from(self, src_network, name=None):  #you need to copy global net variable to thelocal variables 
     src_vars = src_network.get_vars()
     dst_vars = self.get_vars()
 

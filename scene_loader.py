@@ -10,75 +10,88 @@ from constants import ACTION_SIZE
 from constants import SCREEN_WIDTH
 from constants import SCREEN_HEIGHT
 from constants import HISTORY_LENGTH
+import pdb
 
-class THORDiscreteEnvironment(object):
+class THORDiscreteEnvironment(object):  #This is the main environemtns
 
   def __init__(self, config=dict()):
 
     # configurations
-    self.scene_name          = config.get('scene_name', 'bedroom_04')
+    self.scene_name          = config.get('scene_name', 'bedroom_04') #This is the scene name we are feeding
     self.random_start        = config.get('random_start', True)
     self.n_feat_per_locaiton = config.get('n_feat_per_locaiton', 1) # 1 for no sampling
-    self.terminal_state_id   = config.get('terminal_state_id', 1)
-    self.initial_state       = config.get('initial_state', None)
+    self.terminal_state_id   = config.get('terminal_state_id', 1) #This is the target
+    self.initial_state       = config.get('initial_state', None) #Initial state
+
 
     self.h5_file_path = config.get('h5_file_path', 'data/%s.h5'%self.scene_name)
-    self.h5_file      = h5py.File(self.h5_file_path, 'r')
+    self.h5_file      = h5py.File(self.h5_file_path, 'r')  #Acirding to this code this will open the data/bathroom_o2.h5 file
+   
 
     self.locations   = self.h5_file['location'][()]
-    self.rotations   = self.h5_file['rotation'][()]
-    self.n_locations = self.locations.shape[0]
+    self.rotations   = self.h5_file['rotation'][()] #This has angles f 0,90,270,360 It's like agle of rotation for each location
+    self.n_locations = self.locations.shape[0]  #NUMBER OF POSSIBLE LOCATIONS IN THE bathroom file is 408
+
 
     self.terminals = np.zeros(self.n_locations)
     self.terminals[self.terminal_state_id] = 1
-    self.terminal_states, = np.where(self.terminals)
+    #I Think we can have more than  one termona state
+    self.terminal_states, = np.where(self.terminals) #Here single terminal state that is 26
+   
 
-    self.transition_graph = self.h5_file['graph'][()]
-    self.shortest_path_distances = self.h5_file['shortest_path_distance'][()]
+    self.transition_graph = self.h5_file['graph'][()] #For each pint in the 408 grid it has 4 surroundin grid poiints   (-1) means obstacles where you cannot move
+    self.shortest_path_distances = self.h5_file['shortest_path_distance'][()]  #This Graph Gives you  408 *408 amd points you need to travel to get to another location
 
-    self.history_length = HISTORY_LENGTH
+    self.history_length = HISTORY_LENGTH   #Number of previous frames we stacked in
     self.screen_height  = SCREEN_HEIGHT
-    self.screen_width   = SCREEN_WIDTH
+    self.screen_width   = SCREEN_WIDTH#Screen resoution 84*84
+
+      
 
     # we use pre-computed fc7 features from ResNet-50
     # self.s_t = np.zeros([self.screen_height, self.screen_width, self.history_length])
-    self.s_t      = np.zeros([2048, self.history_length])
-    self.s_t1     = np.zeros_like(self.s_t)
-    self.s_target = self._tiled_state(self.terminal_state_id)
+    self.s_t      = np.zeros([2048, self.history_length]) #State representation take the 84*84 and send it through the resnet 50 and get the output from the 
+    self.s_t1     = np.zeros_like(self.s_t) #is this for the next state?
+    self.s_target = self._tiled_state(self.terminal_state_id) #This target state also have four taget status of CNN output
 
-    self.reset()
+
+    self.reset() #resting the environment
 
   # public methods
 
   def reset(self):
     # randomize initial state
-    if self.initial_state:
+    if self.initial_state:  #This is non
       k = self.initial_state
     else:
-      while True:
-        k = random.randrange(self.n_locations)
+      while True:      #randomly initailiaze the starting state
+        k = random.randrange(self.n_locations)  #select a location randomly there are 408 for bathroom
         min_d = np.inf
         # check if target is reachable
-        for t_state in self.terminal_states:
-          dist = self.shortest_path_distances[k][t_state]
-          min_d = min(min_d, dist)
+        for t_state in self.terminal_states: #here we have single terminal state       
+          dist = self.shortest_path_distances[k][t_state] #Check if this is realistic 
+          min_d = min(min_d, dist) #get the distance if we use the shortest path
         # min_d = 0  if k is a terminal state
         # min_d = -1 if no terminal state is reachable from k
-        if min_d > 0: break
+        if min_d > 0: break  #This is realisti 
 
     # reset parameters
-    self.current_state_id = k
-    self.s_t = self._tiled_state(self.current_state_id)
+    self.current_state_id = k   #The current state ID 
+    self.s_t = self._tiled_state(self.current_state_id) #get the currrent state  actually four of same state 
+
 
     self.reward   = 0
     self.collided = False
     self.terminal = False
 
   def step(self, action):
-    assert not self.terminal, 'step() called in terminal state'
+    assert not self.terminal, 'step() called in terminal state' #only run if the this is not the  current state is terminal state
     k = self.current_state_id
-    if self.transition_graph[k][action] != -1:
-      self.current_state_id = self.transition_graph[k][action]
+
+   
+
+    if self.transition_graph[k][action] != -1:  #check if the next state is an obsticle or -1
+      self.current_state_id = self.transition_graph[k][action] #we go to a new state
       if self.terminals[self.current_state_id]:
         self.terminal = True
         self.collided = False
@@ -88,9 +101,10 @@ class THORDiscreteEnvironment(object):
     else:
       self.terminal = False
       self.collided = True
+     
 
     self.reward = self._reward(self.terminal, self.collided)
-    self.s_t1 = np.append(self.s_t[:,1:], self.state, axis=1)
+    self.s_t1 = np.append(self.s_t[:,1:], self.state, axis=1)  #add the new state to the four states (history )
 
   def update(self):
     self.s_t = self.s_t1
@@ -98,9 +112,10 @@ class THORDiscreteEnvironment(object):
   # private methods
 
   def _tiled_state(self, state_id):
+#Here the state ID is the target state
     k = random.randrange(self.n_feat_per_locaiton)
-    f = self.h5_file['resnet_feature'][state_id][k][:,np.newaxis]
-    return np.tile(f, (1, self.history_length))
+    f = self.h5_file['resnet_feature'][state_id][k][:,np.newaxis]   #get the resnet feature of the state 
+    return np.tile(f, (1, self.history_length)) #coping the target in to last for frames :) 
 
   def _reward(self, terminal, collided):
     # positive reward upon task completion

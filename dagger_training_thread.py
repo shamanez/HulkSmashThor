@@ -5,6 +5,7 @@ import random
 import time
 import sys
 from scipy.spatial.distance import cosine
+import pdb
 
 from utils.accum_trainer import AccumTrainer
 from utils.ops import sample_action
@@ -56,7 +57,7 @@ class SmashNetTrainingThread(object): #Threading th training
       self.accum_gradients = self.trainer.accumulate_gradients()
       self.reset_gradients = self.trainer.reset_gradients()
 
-      accum_grad_names = [self._local_var_name(x) for x in self.trainer.get_accum_grad_list()]
+      accum_grad_names = [self._local_var_name(x) for x in self.trainer.get_accum_grad_list()] #This is more of we apply gradients to globabl network
       global_net_vars = [x for x in global_network.get_vars() if self._get_accum_grad_name(x) in accum_grad_names]
 
       self.apply_gradients = grad_applier.apply_gradients( global_net_vars, self.trainer.get_accum_grad_list() )
@@ -107,7 +108,7 @@ class SmashNetTrainingThread(object): #Threading th training
     else: return self._inverse_sigmoid_decay_rate(self.initial_diffidence_rate_seed, global_time_step)
 
   # TODO: check
-  def choose_action(self, smashnet_pi_values, oracle_pi_values, confidence_rate):
+  def choose_action(self, smashnet_pi_values, oracle_pi_values, confidence_rate): #can change the action to take
 
     r = random.random()
     if r < confidence_rate: pi_values = oracle_pi_values
@@ -177,70 +178,75 @@ class SmashNetTrainingThread(object): #Threading th training
     return results
 
   def _flip_policy(self, policy):
+
         flipped_policy = np.array([policy[3],
                          policy[2],
                          policy[1],
                          policy[0]])
         return flipped_policy
 
-  def process(self, sess, global_t, summary_writer, summary_op, summary_placeholders):
-
+  def process(self, sess, global_t, summary_writer, summary_op, summary_placeholders): #This is to run the process 
     if self.env is None:
       # lazy evaluation
       time.sleep(self.thread_index*1.0)
-      self.env = Environment({
+      self.env = Environment({            #This is where you access in to the environment  #scene_loader import THORDiscreteEnvironment 
         'scene_name': self.scene_scope,
         'terminal_state_id': int(self.task_scope)
       })
+     
       self.env.reset()
-      self.oracle = ShortestPathOracle(self.env, ACTION_SIZE)
+      self.oracle = ShortestPathOracle(self.env, ACTION_SIZE) #Get the probabilities of the shortest paths to go to exat position
 
     states = []
     targets = []
-    oracle_pis = []
+    oracle_pis = []  #expert policies
 
     terminal_end = False
 
-    if self.mode is "train":
+
+    if self.mode is "train":   #if the trainign is there
       # reset accumulated gradients
-      sess.run( self.reset_gradients )
+      sess.run( self.reset_gradients )  #reet all the gradients    
 
       # copy weights from shared to local
-      sess.run( self.sync )
+      sess.run( self.sync )  #
 
     start_local_t = self.local_t
 
+
     # t_max times loop (5 steps)
-    for i in range(LOCAL_T_MAX):
+    for i in range(LOCAL_T_MAX): # This is for the training
 
       flipped_run = self.encourage_symmetry and np.random.random() > 0.5
 
       if flipped_run: s_t = self.env.target; g = self.env.s_t
-      else: s_t = self.env.s_t; g = self.env.target
+      else: s_t = self.env.s_t; g = self.env.target    #first the initial state start with same state 4 times as the history stacked as frames 2048*5
 
-      smashnet_pi = self.local_network.run_policy(sess, s_t, g, self.scopes)
+      smashnet_pi = self.local_network.run_policy(sess, s_t, g, self.scopes)  #now gethe policy frmo the local network
       if flipped_run: smashnet_pi = self._flip_policy(smashnet_pi)
 
-      oracle_pi = self.oracle.run_policy(self.env.current_state_id)
+      oracle_pi = self.oracle.run_policy(self.env.current_state_id) #get the policy of the oracle which means the shotest path kind of action in the given state
 
       diffidence_rate = self._anneal_diffidence_rate(global_t)
+
       action = self.choose_action(smashnet_pi, oracle_pi, diffidence_rate)
 
-      states.append(s_t)
-      targets.append(g)
+
+      states.append(s_t) #stack action
+      targets.append(g) #stack target position
       if flipped_run: oracle_pis.append(self._flip_policy(oracle_pi))
-      else: oracle_pis.append(oracle_pi)
+      else: oracle_pis.append(oracle_pi) #get the expert's policies
 
       # if VERBOSE and global_t % 10000 == 0:
       #       print("Thread %d" % (self.thread_index))
       #       sys.stdout.write("SmashNet Pi = {}, Oracle Pi = {}\n".format(["{:0.2f}".format(i) for i in smashnet_pi], ["{:0.2f}".format(i) for i in oracle_pi]))
 
-      if VALIDATE and global_t % VALIDATE_FREQUENCY == 0 and global_t > 0 and self.thread_index == 0:
+      if VALIDATE and global_t % VALIDATE_FREQUENCY == 0 and global_t > 0 and self.thread_index == 0:  #This is for the alidation of the results
         results = self._evaluate(sess, list_of_tasks=VALID_TASK_LIST, num_episodes=NUM_VAL_EPISODES, max_steps=MAX_VALID_STEPS, success_cutoff=SUCCESS_CUTOFF)
         print("Thread %d" % (self.thread_index))
         print("Validation results: %s" % (results))
 
-      self.env.step(action)
+      self.env.step(action)  #here we change the next step
 
       is_terminal = self.env.terminal or self.episode_length > 5e3
       if self.mode is "val" and self.episode_length > 1e3:
@@ -252,7 +258,7 @@ class SmashNetTrainingThread(object): #Threading th training
       self.local_t += 1
 
       # s_t1 -> s_t
-      self.env.update()
+      self.env.update() #update the new state
 
       if is_terminal:
         terminal_end = True
@@ -273,7 +279,7 @@ class SmashNetTrainingThread(object): #Threading th training
         self.episode_loss = 0
         self.env.reset()
 
-        break
+      break
 
     if self.mode is "train":
       states.reverse()

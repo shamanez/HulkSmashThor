@@ -158,25 +158,28 @@ if __name__ == '__main__':
 
 
   def train_function(parallel_index):  #This is called by below
-    print("I am hereeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee")
+    
     global global_t
-    training_thread = training_threads[parallel_index]
-    last_global_t = 0
+    training_thread = training_threads[parallel_index] #Select one training thread
+    last_global_t = 0 #last time step
 
-    scene, task = branches[parallel_index % NUM_TASKS]
+    scene, task = branches[parallel_index % NUM_TASKS] #Extract exact scene and the number of the task
     key = scene + "-" + task
     if branch_val[parallel_index % NUM_TASKS]:
       key = scene + "-val-" + task
-
-    while global_t < MAX_TIME_STEP and not stop_requested: #
+    print("I am hereeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee")  
+    while global_t < MAX_TIME_STEP and not stop_requested: #Make sure our agent doesn't keep running for
       diff_global_t = training_thread.process(sess, global_t, summary_writer,
                                               summary_op[key], summary_placeholders[key])
+
+ #diff_global T is more of how did agent run for contis eposides     
       global_t += diff_global_t
       # periodically save checkpoints to disk
       if parallel_index == 0 and global_t - last_global_t > 1000000:
         print('Save checkpoint at timestamp %d' % global_t)
         saver.save(sess, CHECKPOINT_DIR + '/' + 'checkpoint', global_step = global_t)
         last_global_t = global_t
+      break
 
   def signal_handler(signal, frame):
     global stop_requested
@@ -184,18 +187,24 @@ if __name__ == '__main__':
     stop_requested = True
     
   train_threads = [threading.Thread(target=train_function, args=(i,)) for i in range(PARALLEL_SIZE)] #now trained threads
+
+
  
   signal.signal(signal.SIGINT, signal_handler)
-  b.set_trace()
+  
   # start each training thread
-  for t in train_threads: t.start()
+  for t in train_threads: 
+    t.start()
+    break
 
   print('Press Ctrl+C to stop.')
   signal.pause()
 
   # wait for all threads to finish
-  for t in train_threads: t.join()
-
+  for t in train_threads: 
+    t.join()
+    break
+  b.set_trace()  
   print('Now saving data. Please wait.')
   saver.save(sess, CHECKPOINT_DIR + '/' + 'checkpoint', global_step = global_t)
   summary_writer.close()

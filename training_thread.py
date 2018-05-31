@@ -4,6 +4,7 @@ import numpy as np
 import random
 import time
 import sys
+import pdb
 
 from utils.accum_trainer import AccumTrainer
 from scene_loader import THORDiscreteEnvironment as Environment
@@ -14,7 +15,7 @@ from constants import GAMMA
 from constants import LOCAL_T_MAX
 from constants import ENTROPY_BETA
 from constants import VERBOSE
-
+import pdb
 class A3CTrainingThread(object):
   def __init__(self,
                thread_index,
@@ -109,6 +110,7 @@ class A3CTrainingThread(object):
   def process(self, sess, global_t, summary_writer, summary_op, summary_placeholders):
 
     if self.env is None:
+      print("Yeah!")
       # lazy evaluation
       time.sleep(self.thread_index*1.0)
       self.env = Environment({
@@ -116,6 +118,7 @@ class A3CTrainingThread(object):
         'terminal_state_id': int(self.task_scope)
       })
       self.env.reset()
+    
 
     states = []
     actions = []
@@ -124,6 +127,7 @@ class A3CTrainingThread(object):
     targets = []
 
     terminal_end = False
+    pdb.set_trace()
 
     # reset accumulated gradients
     sess.run( self.reset_gradients )
